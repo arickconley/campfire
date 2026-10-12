@@ -1,0 +1,22 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.HeadTitle}}</title>
+{{if .Style}}<link rel="stylesheet" href="{{.Style}}">{{end}}
+<link rel="alternate" type="application/atom+xml" title="{{.SiteTitle}}" href="/feed.xml">
+</head>
+<body>
+<header>
+  <a href="/">{{.SiteTitle}}</a>
+  <nav>
+    {{range .PagesLinks}}<a href="{{.URL}}">{{.Title}}</a>
+    {{end}}<a href="/feed.xml">Feed</a>
+  </nav>
+</header>
+<main>{{.Main}}</main>
+{{if .SiteDesc}}<footer><p>{{.SiteDesc}}</p></footer>{{end}}
+</body>
+</html>
+{{end}}

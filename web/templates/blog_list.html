@@ -1,0 +1,9 @@
+{{define "blog_list"}}
+<article>
+  {{if or .ShowDate .ShowTitle}}<header>
+  {{if .ShowDate}}<time datetime="{{.DateISO}}"><a href="{{.URL}}">{{.Date}}</a></time>{{end}}
+  {{if .ShowTitle}}<h2><a href="{{.URL}}">{{.Title}}</a></h2>{{end}}
+  </header>{{end}}
+  {{.HTML}}
+</article>
+{{end}}

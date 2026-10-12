@@ -1,0 +1,8 @@
+{{.BackButton}}
+<article>
+  {{if or .Article.ShowDate .Article.ShowTitle}}<header>
+  {{if .Article.ShowDate}}<time datetime="{{.Article.DateISO}}">{{.Article.Date}}</time>{{end}}
+  {{if .Article.ShowTitle}}<h1>{{.Article.Title}}</h1>{{end}}
+  </header>{{end}}
+  {{.Article.HTML}}
+</article>

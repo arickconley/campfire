@@ -1,0 +1,146 @@
+/* paper — cool mist, large dates, small italic titles */
+:root {
+  --paper: #e4eef2;
+  --ink: #17262c;
+  --muted: #4e6872;
+  --link: #0c5c70;
+  --measure: 38rem;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--paper); color: var(--ink); }
+
+body {
+  margin: 0 auto;
+  max-width: var(--measure);
+  padding: 2.5rem 1.25rem 4rem;
+  font-family: Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 1.125rem;
+  line-height: 1.55;
+}
+
+a {
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+a:hover { text-decoration-thickness: 2px; }
+
+a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+}
+
+body > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+body > header > a {
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+nav a { color: var(--muted); }
+
+main > section {
+  margin: 0 0 2.5rem;
+  color: var(--muted);
+}
+
+main > ul {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+}
+
+main > ul li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  margin: 0.35rem 0;
+}
+
+main > ul time {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+article { margin: 0 0 3rem; }
+
+article > header time {
+  display: block;
+  margin: 0 0 0.35rem;
+  font-size: 1.85rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+article > header time a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+article > header h1,
+article > header h2,
+main > h1 {
+  margin: 0 0 0.8rem;
+  font-size: 1.2rem;
+  font-weight: 400;
+  font-style: italic;
+}
+
+article > header h1 a,
+article > header h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+article p { margin: 0.8rem 0; }
+
+article > div {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+article > div > * { margin: 0; }
+
+article pre {
+  background: #f7fbfc;
+  padding: 0.8rem 1rem;
+  overflow: auto;
+}
+
+article pre,
+article code {
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+article img { max-width: 100%; height: auto; }
+
+main > p { color: var(--muted); }
+
+footer {
+  margin-top: 1rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+@media (max-width: 540px) {
+  body { padding-top: 1.5rem; font-size: 1.05rem; }
+  article > header time { font-size: 1.55rem; }
+}

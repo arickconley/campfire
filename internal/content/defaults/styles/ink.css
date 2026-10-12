@@ -1,0 +1,133 @@
+/* ink — dark desk, small amber dates, large titles */
+:root {
+  --bg: #161311;
+  --fg: #f3ecdf;
+  --dim: #b7aa9a;
+  --link: #e7a15a;
+  --measure: 36rem;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--bg); color: var(--fg); }
+
+body {
+  margin: 0 auto;
+  max-width: var(--measure);
+  padding: 2rem 1.25rem 4rem;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+a { color: var(--link); }
+
+a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 3px;
+}
+
+body > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  border-bottom: 1px solid #3a322b;
+  padding-bottom: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+body > header > a {
+  color: var(--fg);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  font-size: 1.15rem;
+}
+
+nav a { color: var(--dim); }
+
+main > section {
+  margin: 0 0 2rem;
+  color: var(--dim);
+}
+
+main > ul {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+}
+
+main > ul li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  margin: 0.45rem 0;
+}
+
+main > ul time { color: var(--link); font-size: 0.85rem; }
+
+article { margin: 0 0 2.25rem; }
+
+article > header time {
+  display: block;
+  margin: 0 0 0.2rem;
+  color: var(--link);
+  font-size: 0.85rem;
+}
+
+article > header time a {
+  color: inherit;
+  text-decoration: none;
+}
+
+article > header h1,
+article > header h2,
+main > h1 {
+  margin: 0 0 0.6rem;
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+article > header h1 a,
+article > header h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+article p { margin: 0.7rem 0; }
+
+article > div {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+article > div > * { margin: 0; }
+
+article pre {
+  background: #241f1b;
+  padding: 0.75rem 1rem;
+  overflow: auto;
+}
+
+article pre,
+article code {
+  font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+article img { max-width: 100%; height: auto; }
+
+main > p,
+footer { color: var(--dim); }
+
+footer {
+  margin-top: 2rem;
+  font-size: 0.9rem;
+}

@@ -1,0 +1,13 @@
+{{if .Blurb}}<section>{{.Blurb}}</section>{{end}}
+{{if .Empty}}<p>No posts yet.</p>{{end}}
+{{if .HasLatest}}{{template "blog_list" .Latest}}{{end}}
+{{if .More}}
+<ul>
+{{range .More}}
+<li>
+  {{if .ShowDate}}<time datetime="{{.DateISO}}">{{if .ShowTitle}}{{.Date}}{{else}}<a href="{{.URL}}">{{.Date}}</a>{{end}}</time>{{end}}
+  {{if .ShowTitle}}<a href="{{.URL}}">{{.Title}}</a>{{end}}
+</li>
+{{end}}
+</ul>
+{{end}}

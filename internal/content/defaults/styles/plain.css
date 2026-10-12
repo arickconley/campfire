@@ -1,0 +1,112 @@
+/* plain — system font, title beside the date, hairline between posts */
+* { box-sizing: border-box; }
+
+html { background: #fff; color: #1a1a1a; }
+
+body {
+  margin: 0 auto;
+  max-width: 40rem;
+  padding: 1.5rem 1rem 3rem;
+  font-family: system-ui, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+a { color: #0645ad; }
+
+a:focus-visible {
+  outline: 2px solid #0645ad;
+  outline-offset: 2px;
+}
+
+body > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+body > header > a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+main > section { margin-bottom: 1.5rem; }
+
+main > ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+main > ul li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  margin: 0;
+  padding: 0.45rem 0;
+  border-top: 1px solid #ddd;
+}
+
+main > ul time { color: #555; font-size: 0.9rem; }
+
+article + article {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ddd;
+}
+
+article > header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  align-items: baseline;
+}
+
+article > header time {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+article > header time a {
+  color: inherit;
+  text-decoration: none;
+}
+
+article > header h1,
+article > header h2,
+main > h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+article > header h2 a { color: inherit; }
+
+article p { margin: 0.6rem 0; }
+
+article > div {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+article > div > * { margin: 0; }
+
+article pre {
+  background: #f4f4f4;
+  padding: 0.6rem 0.8rem;
+  overflow: auto;
+}
+
+article img { max-width: 100%; height: auto; }
+
+main > p,
+footer { color: #555; }
+
+footer { margin-top: 2rem; font-size: 0.9rem; }

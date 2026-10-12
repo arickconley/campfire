@@ -1,0 +1,8 @@
+.DS_Store
+
+/campfire
+/campfire.exe
+*.test
+*.out
+
+/content/

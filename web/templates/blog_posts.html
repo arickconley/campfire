@@ -1,0 +1,5 @@
+{{define "blog_posts"}}
+{{if .Blurb}}<section>{{.Blurb}}</section>{{end}}
+{{if .Empty}}<p>No posts yet.</p>{{end}}
+{{range .Posts}}{{template "blog_list" .}}{{end}}
+{{end}}
