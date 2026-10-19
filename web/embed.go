@@ -7,3 +7,8 @@ import "embed"
 //
 //go:embed templates
 var FS embed.FS
+
+// Favicon is the campfire mark.
+//
+//go:embed favicon.ico
+var Favicon []byte

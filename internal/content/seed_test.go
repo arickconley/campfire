@@ -16,7 +16,7 @@ func TestSeedMissing(t *testing.T) {
 	if err := Seed(root); err != nil {
 		t.Fatal(err)
 	}
-	hello := filepath.Join(root, "posts", "hello.md")
+	hello := filepath.Join(root, "posts", "hello.html")
 	if err := os.WriteFile(hello, []byte("edited\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestSeedEmptyAndDotfiles(t *testing.T) {
 
 func TestSeedLeavesExisting(t *testing.T) {
 	root := t.TempDir()
-	mine := filepath.Join(root, "posts", "mine.md")
+	mine := filepath.Join(root, "posts", "mine.html")
 	if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestSeedLeavesExisting(t *testing.T) {
 	if err := Seed(root); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "posts", "hello.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "posts", "hello.html")); !os.IsNotExist(err) {
 		t.Fatalf("seeded over existing tree %v", err)
 	}
 }
@@ -79,9 +79,9 @@ func TestSeedRejectsFile(t *testing.T) {
 func assertStarter(t *testing.T, root string) {
 	t.Helper()
 	for _, rel := range []string{
-		"index.md",
-		"about.md",
-		"posts/hello.md",
+		"index.html",
+		"about.html",
+		"posts/hello.html",
 		"media/mark.svg",
 		"styles/paper.css",
 		"styles/ink.css",
@@ -108,7 +108,7 @@ func assertStarter(t *testing.T, root string) {
 		t.Fatal(err)
 	}
 	hello, ok := ix.Find("hello")
-	if !ok || hello.Draft || hello.Title != "Hello" || !strings.Contains(hello.Body, "The fire is lit.") {
+	if !ok || hello.Draft || hello.Title != "Hello" || !strings.Contains(hello.Body, "The fire is lit.") || strings.Contains(hello.Body, "mark.svg") {
 		t.Fatalf("hello %+v %v", hello, ok)
 	}
 	if _, ok := ix.Blurb(); !ok {

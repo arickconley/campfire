@@ -1,8 +1,6 @@
 package render
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,123 +8,13 @@ import (
 	"time"
 )
 
-func TestMarkdownEscapesHTML(t *testing.T) {
-	r, err := New()
+func TestLegacyMarkdownEscapesHTML(t *testing.T) {
+	html, err := LegacyMarkdown("Hello <script>alert(1)</script>\n\n**bold**\n")
 	if err != nil {
 		t.Fatal(err)
 	}
-	html, err := r.Markdown("Hello <script>alert(1)</script>\n\n**bold**\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(html)
-	if strings.Contains(s, "<script>") {
-		t.Fatalf("raw script: %s", s)
-	}
-	if !strings.Contains(s, "&lt;script&gt;") || !strings.Contains(s, "<strong>bold</strong>") {
-		t.Fatalf("html: %s", s)
-	}
-}
-
-func TestDiskCacheBust(t *testing.T) {
-	r, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	a, err := r.Cached(root, "posts/a.md", "Hello **a**\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := r.Cached(root, "posts/a.md", "Hello **a**\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a != b || !strings.Contains(string(a), "<strong>a</strong>") {
-		t.Fatalf("hit %s", a)
-	}
-	files, _ := filepath.Glob(filepath.Join(root, ".cache", "posts", "*.html"))
-	if len(files) != 1 {
-		t.Fatalf("files %v", files)
-	}
-	c, err := r.Cached(root, "posts/a.md", "Hello **b**\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(c), "<strong>a</strong>") || !strings.Contains(string(c), "<strong>b</strong>") {
-		t.Fatalf("bust %s", c)
-	}
-	raw, err := os.ReadFile(files[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "<strong>a</strong>") {
-		t.Fatalf("stale file %s", raw)
-	}
-	again, _ := filepath.Glob(filepath.Join(root, ".cache", "posts", "*.html"))
-	if len(again) != 1 {
-		t.Fatalf("files after edit %v", again)
-	}
-	Drop(root, "posts/a.md")
-	if _, err := os.Stat(files[0]); !os.IsNotExist(err) {
-		t.Fatalf("drop %v", err)
-	}
-	if _, err := r.Cached(root, "", "no\n"); err == nil {
-		t.Fatal("empty path accepted")
-	}
-}
-
-func TestCacheWriteErrorStillServes(t *testing.T) {
-	r, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, ".cache"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	html, err := r.Cached(root, "posts/a.md", "Hello **a**\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(html), "<strong>a</strong>") {
-		t.Fatalf("html %s", html)
-	}
-}
-
-func TestCacheStampRejectsBareHash(t *testing.T) {
-	r, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := t.TempDir()
-	src := "Hello **a**\n"
-	full, err := cachePath(root, "posts/a.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	sum := sha256.Sum256([]byte(src))
-	old := hex.EncodeToString(sum[:]) + "\n<p>old</p>"
-	if err := os.WriteFile(full, []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	html, err := r.Cached(root, "posts/a.md", src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(html), "old") || !strings.Contains(string(html), "<strong>a</strong>") {
-		t.Fatalf("html %s", html)
-	}
-	raw, err := os.ReadFile(full)
-	if err != nil {
-		t.Fatal(err)
-	}
-	line, _, ok := splitStamp(raw)
-	if !ok || !strings.Contains(line, " ") {
-		t.Fatalf("stamp %q", line)
+	if strings.Contains(html, "<script>") || !strings.Contains(html, "&lt;script&gt;") || !strings.Contains(html, "<strong>bold</strong>") {
+		t.Fatalf("HTML: %s", html)
 	}
 }
 

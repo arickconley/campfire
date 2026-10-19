@@ -35,6 +35,9 @@ func boot(t *testing.T, token string, files map[string]string) (*httptest.Server
 			t.Fatal(err)
 		}
 	}
+	if err := content.Migrate(root); err != nil {
+		t.Fatal(err)
+	}
 	s, err := New(root)
 	if err != nil {
 		t.Fatal(err)
@@ -106,8 +109,12 @@ func TestSeededSite(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	code, body := get(t, ts.URL+"/")
-	if code != 200 || !strings.Contains(body, `action="/setup"`) || !strings.Contains(body, `<option value="nerd">`) || !strings.Contains(body, `<option value="paper" selected>`) {
+	if code != 200 || !strings.Contains(body, `action="/setup"`) || !strings.Contains(body, `<option value="nerd">`) || !strings.Contains(body, `<option value="paper" selected>`) || !strings.Contains(body, `href="/favicon.ico"`) {
 		t.Fatalf("setup %d %s", code, body)
+	}
+	code, body = get(t, ts.URL+"/favicon.ico")
+	if code != 200 || !strings.HasPrefix(body, "\x00\x00\x01\x00") {
+		t.Fatalf("favicon %d", code)
 	}
 	res, err := http.PostForm(ts.URL+"/setup", url.Values{
 		"title": {"Camp"},
@@ -119,7 +126,7 @@ func TestSeededSite(t *testing.T) {
 	defer res.Body.Close()
 	b, _ := io.ReadAll(res.Body)
 	page := string(b)
-	if res.StatusCode != 200 || !strings.Contains(page, "The fire is lit.") || !strings.Contains(page, "Short notes, newest first.") || !strings.Contains(page, `href="/styles/paper.css"`) || strings.Contains(page, `action="/setup"`) {
+	if res.StatusCode != 200 || !strings.Contains(page, "The fire is lit.") || !strings.Contains(page, "Short notes, newest first.") || !strings.Contains(page, `href="/styles/paper.css"`) || !strings.Contains(page, `href="/favicon.ico"`) || strings.Contains(page, `action="/setup"`) || strings.Contains(page, "mark.svg") {
 		t.Fatalf("home %d %s", res.StatusCode, page)
 	}
 	code, _ = get(t, ts.URL+"/templates/layout.html")
@@ -233,19 +240,19 @@ func TestPublicPages(t *testing.T) {
 func TestAPI(t *testing.T) {
 	ts, root := boot(t, "secret", sample())
 
-	code, body := call(t, http.MethodPost, ts.URL+"/api/posts", "", `{"body":"x"}`)
+	code, body := call(t, http.MethodPost, ts.URL+"/api/posts", "", `{"format":"html","body":"x"}`)
 	if code != 401 {
 		t.Fatalf("no token %d %s", code, body)
 	}
-	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "nope", `{"body":"x"}`)
+	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "nope", `{"format":"html","body":"x"}`)
 	if code != 401 {
 		t.Fatalf("bad token %d %s", code, body)
 	}
-	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"slug":"../x","body":"no"}`)
+	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"format":"html","slug":"../x","body":"no"}`)
 	if code != 400 {
 		t.Fatalf("traversal %d %s", code, body)
 	}
-	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"title":"Hello","body":"First post."}`)
+	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"format":"html","title":"Hello","body":"First post."}`)
 	if code != 201 || !strings.Contains(body, `"slug":"hello"`) {
 		t.Fatalf("create %d %s", code, body)
 	}
@@ -258,7 +265,7 @@ func TestAPI(t *testing.T) {
 	if created.URL != "http://example.test/posts/hello" {
 		t.Fatalf("url %s", created.URL)
 	}
-	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"slug":"hello","body":"again"}`)
+	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", "secret", `{"format":"html","slug":"hello","body":"again"}`)
 	if code != 409 {
 		t.Fatalf("dup %d %s", code, body)
 	}
@@ -277,11 +284,11 @@ func TestAPI(t *testing.T) {
 		t.Fatalf("get draft %d %s", code, body)
 	}
 
-	code, body = call(t, http.MethodPut, ts.URL+"/api/posts/hello", "secret", `{"title":"Edited","body":"Updated body"}`)
+	code, body = call(t, http.MethodPut, ts.URL+"/api/posts/hello", "secret", `{"format":"html","title":"Edited","body":"Updated body"}`)
 	if code != 200 || !strings.Contains(body, "Updated body") {
 		t.Fatalf("put %d %s", code, body)
 	}
-	matches, _ := filepath.Glob(filepath.Join(root, "posts", "*hello.md"))
+	matches, _ := filepath.Glob(filepath.Join(root, "posts", "*hello.html"))
 	if len(matches) != 1 {
 		t.Fatalf("files %v", matches)
 	}
@@ -351,6 +358,9 @@ func TestBackPath(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := content.Migrate(root); err != nil {
+		t.Fatal(err)
+	}
 	ix, err := content.Load(root)
 	if err != nil {
 		t.Fatal(err)
@@ -369,7 +379,7 @@ func TestBackPath(t *testing.T) {
 func TestTemplates(t *testing.T) {
 	files := sample()
 	files["templates/blog_posts.html"] = "{{if .HasLatest}}<p id=\"latest\">{{.Latest.HTML}}</p>{{end}}<ul>{{range .More}}<li>{{.Title}}</li>{{end}}</ul>"
-	files["templates/blog_post.html"] = "<article id=\"one\">{{.Article.Title}}</article>"
+	files["templates/blog_post.html"] = "<article id=\"one\">{{.Article.Title}}{{.Article.HTML}}</article>"
 	ts, _ := boot(t, "", files)
 	code, body := get(t, ts.URL+"/")
 	if code != 200 || !strings.Contains(body, `id="latest"`) || !strings.Contains(body, "NEWPOST") {
@@ -516,7 +526,7 @@ func TestSetupPage(t *testing.T) {
 	if cfg.Title != "Dadaches" || cfg.Description != "Notes." || cfg.URL != "http://example.test" || cfg.Style != "ink" {
 		t.Fatalf("yaml %+v", cfg)
 	}
-	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", token, `{"title":"Hi","body":"From the wizard."}`)
+	code, body = call(t, http.MethodPost, ts.URL+"/api/posts", token, `{"format":"html","title":"Hi","body":"From the wizard."}`)
 	if code != 201 {
 		t.Fatalf("write with wizard token %d %s", code, body)
 	}
@@ -589,7 +599,7 @@ func TestConcurrentCreate(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func(i int) {
 			defer wg.Done()
-			req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/posts", strings.NewReader(`{"slug":"race","body":"x"}`))
+			req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/posts", strings.NewReader(`{"format":"html","slug":"race","body":"x"}`))
 			if err != nil {
 				errs[i] = err
 				return
@@ -616,7 +626,7 @@ func TestConcurrentCreate(t *testing.T) {
 	if codes[0] != http.StatusCreated || codes[1] != http.StatusConflict {
 		t.Fatalf("codes %v", codes)
 	}
-	matches, err := filepath.Glob(filepath.Join(root, "posts", "*race.md"))
+	matches, err := filepath.Glob(filepath.Join(root, "posts", "*race.html"))
 	if err != nil {
 		t.Fatal(err)
 	}

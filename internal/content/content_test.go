@@ -37,6 +37,9 @@ func TestLoadTree(t *testing.T) {
 		}
 	}
 
+	if err := Migrate(root); err != nil {
+		t.Fatal(err)
+	}
 	ix, err := Load(root)
 	if err != nil {
 		t.Fatal(err)
@@ -97,10 +100,10 @@ func TestLoadTree(t *testing.T) {
 		t.Fatalf("feed: %+v", feed)
 	}
 	if !feed[1].Date.Equal(time.Date(2020, 5, 5, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("front matter date should win: %s", feed[1].Date)
+		t.Fatalf("document date should win: %s", feed[1].Date)
 	}
 	if !feed[0].Date.Equal(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("front matter date: %s", feed[0].Date)
+		t.Fatalf("document date: %s", feed[0].Date)
 	}
 	for _, d := range feed {
 		if strings.Contains(d.Body, "DRAFT") || strings.Contains(d.Body, "NESTED") || strings.Contains(d.Body, "HIDDEN") {
@@ -123,13 +126,13 @@ func TestWrites(t *testing.T) {
 	if doc.Slug != "hello-world" {
 		t.Fatalf("slug %s", doc.Slug)
 	}
-	full := filepath.Join(root, "posts", "hello-world.md")
+	full := filepath.Join(root, "posts", "hello-world.html")
 	raw, err := os.ReadFile(full)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "date: 2026-03-04T05:06:07Z") {
-		t.Fatalf("date not in front matter:\n%s", raw)
+	if !strings.Contains(string(raw), `name="campfire-date" content="2026-03-04T05:06:07Z"`) {
+		t.Fatalf("date not in head metadata:\n%s", raw)
 	}
 	_, err = WritePost(root, Input{Slug: "hello-world", Body: "again"})
 	if !errors.Is(err, ErrExists) {
@@ -159,7 +162,7 @@ func TestWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal("filename changed")
 	}
-	if !strings.Contains(string(raw), "date: 2026-08-09T00:00:00Z") {
+	if !strings.Contains(string(raw), `name="campfire-date" content="2026-08-09T00:00:00Z"`) {
 		t.Fatalf("updated date:\n%s", raw)
 	}
 	ix, err := Load(root)
@@ -179,34 +182,26 @@ func TestWrites(t *testing.T) {
 	}
 }
 
-func TestSkipBadMarkdown(t *testing.T) {
+func TestSkipBadHTML(t *testing.T) {
 	root := t.TempDir()
-	files := map[string]string{
-		"posts/ok.md":  "hello\n",
-		"posts/bad.md": "---\ntitle: [\n---\nNOPE\n",
-		"about.md":     "about\n",
+	if _, err := WritePost(root, Input{Slug: "ok", Body: "<p>hello</p>"}); err != nil {
+		t.Fatal(err)
 	}
-	for rel, body := range files {
-		full := filepath.Join(root, filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if err := os.WriteFile(filepath.Join(root, "posts/bad.html"), []byte(`<html><head><meta name="campfire-draft" content="invalid"/></head><body>SECRET</body></html>`), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	ix, err := Load(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := ix.Find("ok"); !ok {
-		t.Fatal("missing ok")
+		t.Fatal("missing valid post")
 	}
 	if _, ok := ix.Find("bad"); ok {
-		t.Fatal("kept bad markdown")
+		t.Fatal("kept invalid HTML")
 	}
-	if _, ok := ix.Page("/about"); !ok {
-		t.Fatal("missing about")
+	if _, ok := ix.Static("/posts/bad.html"); ok {
+		t.Fatal("exposed invalid HTML")
 	}
 }
 
@@ -217,6 +212,9 @@ func TestSymlinkRoot(t *testing.T) {
 	}
 	link := filepath.Join(t.TempDir(), "content")
 	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(link); err != nil {
 		t.Fatal(err)
 	}
 	ix, err := Load(link)
@@ -260,6 +258,11 @@ func TestSeparatePosts(t *testing.T) {
 	if err := os.WriteFile(later, []byte("---\ntitle: Later\ndate: 2026-03-01T00:00:00Z\n---\nNEW\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := Migrate(root); err != nil {
+		t.Fatal(err)
+	}
+	early = strings.TrimSuffix(early, ".md") + ".html"
+	later = strings.TrimSuffix(later, ".md") + ".html"
 	ix, err := Load(root)
 	if err != nil {
 		t.Fatal(err)

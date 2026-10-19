@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"campfire/internal/content"
 	"campfire/internal/render"
 	"campfire/internal/site"
+	"campfire/web"
 )
 
 const maxBody = 1 << 20
@@ -32,12 +34,19 @@ type Server struct {
 	Root   string
 	Render *render.Renderer
 	// mu serializes create, update, and delete.
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 // New builds a server. root is the content directory.
 // The write token is read from root/.token on each API call.
 func New(root string) (*Server, error) {
+	legacy, err := content.HasMarkdown(root)
+	if err != nil {
+		return nil, err
+	}
+	if legacy {
+		return nil, errors.New("Markdown content found; run campfire -content <folder> -migrate before starting")
+	}
 	r, err := render.New()
 	if err != nil {
 		return nil, err
@@ -57,6 +66,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/posts/{slug}", s.delete)
 	mux.HandleFunc("GET /{path...}", s.page)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/posts" || strings.HasPrefix(r.URL.Path, "/api/posts/") {
+			w.Header().Set("X-Campfire-Content-Format", "html")
+		}
+		if r.URL.Path == "/favicon.ico" {
+			writeFavicon(w, r)
+			return
+		}
 		if !site.Exists(s.Root) {
 			s.setup(w, r)
 			return
@@ -65,12 +81,33 @@ func (s *Server) Handler() http.Handler {
 	})
 }
 
+func writeFavicon(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Content-Length", strconv.Itoa(len(web.Favicon)))
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = w.Write(web.Favicon)
+}
+
 func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" && r.URL.Path != "/setup" {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	if r.URL.Path == "/setup" && r.Method == http.MethodPost {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if site.Exists(s.Root) {
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
@@ -90,6 +127,10 @@ func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
 				log.Printf("setup: %v", err)
 			}
 			s.renderSetup(w, r, cfg, msg, "", false, r.FormValue("api") == "1")
+			return
+		}
+		if err := content.Rebuild(s.Root); err != nil {
+			s.htmlErr(w, err)
 			return
 		}
 		if r.FormValue("api") != "1" {
@@ -262,6 +303,7 @@ var setupTmpl = template.Must(template.New("setup").Parse(`<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{if .Done}}Write token{{else}}Set up{{end}}</title>
+<link rel="icon" href="/favicon.ico">
 <style>
   body { font-family: system-ui, sans-serif; max-width: 32rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.45; }
   label { display: block; margin: 1rem 0 .25rem; }
@@ -324,12 +366,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		v.More = posts[1:]
 	}
 	if b, found := ix.Blurb(); found {
-		html, err := s.Render.Cached(s.Root, b.Rel, b.Body)
-		if err != nil {
-			s.htmlErr(w, err)
-			return
-		}
-		v.Blurb = html
+		v.Blurb = template.HTML(b.Body)
 	}
 	s.writeHTML(w, http.StatusOK, func(w io.Writer) error {
 		return s.Render.Feed(s.Root, w, v)
@@ -337,32 +374,26 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) page(w http.ResponseWriter, r *http.Request) {
+	// Keep publication metadata and the served file consistent across API saves.
+	s.mu.RLock()
 	ix, cfg, ok := s.snap(w)
 	if !ok {
+		s.mu.RUnlock()
 		return
 	}
 	u := cleanPath(r.PathValue("path"))
 	if doc, found := ix.Page(u); found {
 		if doc.Draft {
+			s.mu.RUnlock()
 			s.notFound(w, cfg, ix)
 			return
 		}
-		html, err := s.Render.Cached(s.Root, doc.Rel, doc.Body)
-		if err != nil {
-			s.htmlErr(w, err)
-			return
-		}
-		v := s.view(cfg, ix)
-		v.Article = article(doc, html)
-		v.Back = backPath(ix, doc.URL)
-		if doc.Title != "" {
-			v.HeadTitle = doc.Title + " · " + cfg.Title
-		}
-		s.writeHTML(w, http.StatusOK, func(w io.Writer) error {
-			return s.Render.Page(s.Root, w, v)
-		})
+		defer s.mu.RUnlock()
+		w.Header().Set("Cache-Control", "no-cache")
+		s.file(w, r, doc.Rel)
 		return
 	}
+	s.mu.RUnlock()
 	if rel, found := ix.Static(u); found {
 		s.file(w, r, rel)
 		return
@@ -380,11 +411,7 @@ func (s *Server) feed(w http.ResponseWriter, r *http.Request) {
 	entries := make([]render.AtomEntry, 0, len(posts))
 	var updated time.Time
 	for _, d := range posts {
-		html, err := s.Render.Cached(s.Root, d.Rel, d.Body)
-		if err != nil {
-			s.htmlErr(w, err)
-			return
-		}
+
 		if updated.IsZero() {
 			updated = d.Date
 		}
@@ -392,7 +419,7 @@ func (s *Server) feed(w http.ResponseWriter, r *http.Request) {
 			Title:   d.Title,
 			URL:     base + d.URL,
 			Updated: d.Date,
-			HTML:    html,
+			HTML:    template.HTML(d.Body),
 		})
 	}
 	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
@@ -493,10 +520,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := r.PathValue("slug")
 	s.mu.Lock()
-	rels, err := content.DeletePost(s.Root, slug)
-	for _, rel := range rels {
-		render.Drop(s.Root, rel)
-	}
+	_, err := content.DeletePost(s.Root, slug)
 	s.mu.Unlock()
 	if err != nil {
 		writeStoreErr(w, err)
@@ -564,11 +588,7 @@ func (s *Server) load() (*content.Index, site.Config, error) {
 func (s *Server) articles(docs []content.Doc) ([]render.Article, error) {
 	out := make([]render.Article, 0, len(docs))
 	for _, d := range docs {
-		html, err := s.Render.Cached(s.Root, d.Rel, d.Body)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, article(d, html))
+		out = append(out, article(d, template.HTML(d.Body)))
 	}
 	return out, nil
 }
@@ -695,17 +715,18 @@ func article(d content.Doc, html template.HTML) render.Article {
 
 func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 	ct := r.Header.Get("Content-Type")
-	if ct != "" && !strings.HasPrefix(ct, "application/json") {
+	if ct != "" && !strings.HasPrefix(ct, "application/json") && ct != "application/vnd.campfire.html+json" {
 		writeErr(w, http.StatusUnsupportedMediaType, "content type")
 		return content.Input{}, false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	var req struct {
-		Title string `json:"title"`
-		Slug  string `json:"slug"`
-		Date  string `json:"date"`
-		Draft bool   `json:"draft"`
-		Body  string `json:"body"`
+		Title  string `json:"title"`
+		Slug   string `json:"slug"`
+		Date   string `json:"date"`
+		Draft  bool   `json:"draft"`
+		Body   string `json:"body"`
+		Format string `json:"format"`
 	}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -715,6 +736,10 @@ func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 			return content.Input{}, false
 		}
 		writeErr(w, http.StatusBadRequest, "invalid json")
+		return content.Input{}, false
+	}
+	if req.Format != "html" {
+		writeErr(w, http.StatusBadRequest, "HTML body format required; update your Campfire app")
 		return content.Input{}, false
 	}
 	in := content.Input{Title: req.Title, Slug: req.Slug, Draft: req.Draft, Body: req.Body}
@@ -730,21 +755,23 @@ func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 }
 
 type postJSON struct {
-	Slug  string `json:"slug"`
-	Title string `json:"title"`
-	Date  string `json:"date"`
-	Draft bool   `json:"draft"`
-	URL   string `json:"url"`
-	Body  string `json:"body,omitempty"`
+	Slug   string `json:"slug"`
+	Title  string `json:"title"`
+	Date   string `json:"date"`
+	Draft  bool   `json:"draft"`
+	URL    string `json:"url"`
+	Body   string `json:"body,omitempty"`
+	Format string `json:"format"`
 }
 
 func toJSON(cfg site.Config, d content.Doc, withBody bool) postJSON {
 	p := postJSON{
-		Slug:  d.Slug,
-		Title: d.Title,
-		Date:  d.Date.UTC().Format(time.RFC3339),
-		Draft: d.Draft,
-		URL:   postURL(cfg, d.URL),
+		Format: "html",
+		Slug:   d.Slug,
+		Title:  d.Title,
+		Date:   d.Date.UTC().Format(time.RFC3339),
+		Draft:  d.Draft,
+		URL:    postURL(cfg, d.URL),
 	}
 	if withBody {
 		p.Body = d.Body
@@ -767,6 +794,8 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusNotFound, "not found")
 	case errors.Is(err, content.ErrSlug):
 		writeErr(w, http.StatusBadRequest, "invalid slug")
+	case errors.Is(err, content.ErrHTML):
+		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, content.ErrBody):
 		writeErr(w, http.StatusBadRequest, "body required")
 	case errors.Is(err, content.ErrEscape):

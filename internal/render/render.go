@@ -1,30 +1,17 @@
-// Package render turns markdown and site data into HTML and Atom.
+// Package render builds complete HTML pages and Atom feeds.
 package render
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"html"
 	"html/template"
 	"io"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
-	"runtime/debug"
-	"strings"
 	"time"
-
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/text"
-	"github.com/yuin/goldmark/util"
 
 	"campfire/web"
 )
@@ -89,155 +76,15 @@ type AtomEntry struct {
 	HTML    template.HTML
 }
 
-// Renderer holds the markdown engine and templates.
-type Renderer struct {
-	md   goldmark.Markdown
-	tmpl *template.Template
-}
+// Renderer holds the site templates. Post bodies are already HTML.
+type Renderer struct{ tmpl *template.Template }
 
-// New parses the embedded templates.
 func New() (*Renderer, error) {
 	tmpl, err := template.ParseFS(web.FS, "templates/*.html")
 	if err != nil {
 		return nil, err
 	}
-	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithParserOptions(
-			parser.WithASTTransformers(util.Prioritized(escapeHTML{}, 1000)),
-		),
-	)
-	return &Renderer{md: md, tmpl: tmpl}, nil
-}
-
-// Markdown renders src. Raw HTML is escaped into text.
-func (r *Renderer) Markdown(src string) (template.HTML, error) {
-	var buf bytes.Buffer
-	if err := r.md.Convert([]byte(src), &buf); err != nil {
-		return "", err
-	}
-	return template.HTML(buf.String()), nil
-}
-
-// Cached renders src and stores one HTML file at root/.cache/<rel>.html.
-// The file records a hash of src and the renderer version. An edit replaces that file.
-// The HTML is not kept on the Renderer. A cache write error is logged.
-func (r *Renderer) Cached(root, rel, src string) (template.HTML, error) {
-	if root == "" {
-		return r.Markdown(src)
-	}
-	full, err := cachePath(root, rel)
-	if err != nil {
-		return "", err
-	}
-	stamp := cacheStamp(src)
-	if b, err := os.ReadFile(full); err == nil {
-		if got, html, ok := splitStamp(b); ok && got == stamp {
-			return template.HTML(html), nil
-		}
-	}
-	html, err := r.Markdown(src)
-	if err != nil {
-		return "", err
-	}
-	if err := writeCache(full, stamp, []byte(html)); err != nil {
-		log.Printf("cache %s: %v", rel, err)
-		return html, nil
-	}
-	return html, nil
-}
-
-// Drop removes the cached HTML for rel. A missing file is not an error.
-func Drop(root, rel string) {
-	full, err := cachePath(root, rel)
-	if err != nil {
-		return
-	}
-	os.Remove(full)
-}
-
-func splitStamp(b []byte) (string, []byte, bool) {
-	i := bytes.IndexByte(b, '\n')
-	if i <= 0 {
-		return "", nil, false
-	}
-	return string(b[:i]), b[i+1:], true
-}
-
-// cacheStamp is the hash of src plus the markdown renderer version.
-// A Goldmark upgrade misses every old file.
-func cacheStamp(src string) string {
-	sum := sha256.Sum256([]byte(src))
-	return hex.EncodeToString(sum[:]) + " " + renderVersion
-}
-
-var renderVersion = goldmarkVersion()
-
-func goldmarkVersion() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "unknown"
-	}
-	for _, dep := range info.Deps {
-		if dep.Path != "github.com/yuin/goldmark" {
-			continue
-		}
-		if dep.Replace != nil && dep.Replace.Version != "" {
-			return dep.Replace.Version
-		}
-		if dep.Version != "" {
-			return dep.Version
-		}
-	}
-	return "unknown"
-}
-
-func writeCache(full, stamp string, html []byte) error {
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(full), ".tmp-*")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	_, werr := f.Write(append([]byte(stamp+"\n"), html...))
-	cerr := f.Close()
-	if werr != nil || cerr != nil {
-		os.Remove(name)
-		if werr != nil {
-			return werr
-		}
-		return cerr
-	}
-	if err := os.Rename(name, full); err != nil {
-		os.Remove(name)
-		return err
-	}
-	return nil
-}
-
-func cachePath(root, rel string) (string, error) {
-	rel = path.Clean("/" + filepath.ToSlash(rel))
-	if rel == "/" {
-		return "", fmt.Errorf("cache path %q", rel)
-	}
-	rel = strings.TrimPrefix(rel, "/")
-	cacheRoot := filepath.Join(root, ".cache")
-	full := filepath.Join(cacheRoot, filepath.FromSlash(rel)+".html")
-	absRoot, err := filepath.Abs(cacheRoot)
-	if err != nil {
-		return "", err
-	}
-	absFull, err := filepath.Abs(full)
-	if err != nil {
-		return "", err
-	}
-	sep := string(os.PathSeparator)
-	if absFull != absRoot && !strings.HasPrefix(absFull, absRoot+sep) {
-		return "", fmt.Errorf("cache path %q", rel)
-	}
-	return full, nil
+	return &Renderer{tmpl: tmpl}, nil
 }
 
 // Feed writes the home page.
@@ -245,7 +92,7 @@ func (r *Renderer) Feed(root string, w io.Writer, v View) error {
 	return r.write(root, w, "blog_posts", v)
 }
 
-// Page writes one markdown page.
+// Page builds one complete HTML page.
 func (r *Renderer) Page(root string, w io.Writer, v View) error {
 	return r.write(root, w, "blog_post", v)
 }
@@ -343,37 +190,6 @@ func (r *Renderer) Atom(w io.Writer, v AtomView) error {
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
 	return enc.Encode(feed)
-}
-
-// escapeHTML turns raw HTML nodes into text so the renderer escapes them.
-type escapeHTML struct{}
-
-func (escapeHTML) Transform(doc *ast.Document, reader text.Reader, _ parser.Context) {
-	src := reader.Source()
-	var nodes []ast.Node
-	var vals [][]byte
-	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		var raw []byte
-		switch x := n.(type) {
-		case *ast.HTMLBlock:
-			raw = x.Text(src)
-		case *ast.RawHTML:
-			raw = x.Text(src)
-		default:
-			return ast.WalkContinue, nil
-		}
-		nodes = append(nodes, n)
-		vals = append(vals, append([]byte(nil), raw...))
-		return ast.WalkSkipChildren, nil
-	})
-	for i, n := range nodes {
-		p := n.Parent()
-		p.InsertBefore(p, n, ast.NewString(vals[i]))
-		p.RemoveChild(p, n)
-	}
 }
 
 type atomFeed struct {

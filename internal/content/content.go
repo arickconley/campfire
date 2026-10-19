@@ -1,10 +1,11 @@
-// Package content reads and writes the markdown files Campfire serves.
+// Package content reads and writes complete HTML documents.
 // The content directory is the database.
 package content
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -30,7 +31,7 @@ var (
 	slugRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
-// Kind is how a markdown file is published.
+// Kind is how a content file is published.
 type Kind int
 
 const (
@@ -39,7 +40,7 @@ const (
 	KindBlurb
 )
 
-// Doc is one markdown file.
+// Doc is one HTML document with its editable body.
 type Doc struct {
 	Rel   string
 	URL   string
@@ -77,8 +78,10 @@ type front struct {
 
 // Load walks root. Hidden names (dot or underscore) and site.yaml are skipped.
 // Symlinks inside the tree are skipped. A symlinked root is followed.
-// A markdown file that does not parse is skipped.
-func Load(root string) (*Index, error) {
+// Invalid HTML documents are skipped and never exposed as static files.
+func Load(root string) (*Index, error) { return load(root, false) }
+
+func load(root string, legacy bool) (*Index, error) {
 	ix := &Index{
 		byURL:  map[string]Doc{},
 		static: map[string]string{},
@@ -122,7 +125,13 @@ func Load(root string) (*Index, error) {
 		if base == "site.yaml" {
 			return nil
 		}
-		if strings.HasSuffix(base, ".md") {
+		if strings.HasSuffix(base, ".md") && !legacy {
+			return nil
+		}
+		if strings.HasSuffix(base, ".html") && legacy {
+			return nil
+		}
+		if strings.HasSuffix(base, ".html") || (legacy && strings.HasSuffix(base, ".md")) {
 			raw, err := os.ReadFile(full)
 			if err != nil {
 				return err
@@ -131,8 +140,16 @@ func Load(root string) (*Index, error) {
 			if err != nil {
 				return err
 			}
-			doc, err := parse(rel, info.ModTime(), raw)
+			var doc Doc
+			if legacy {
+				doc, err = parseMarkdown(rel, info.ModTime(), raw)
+			} else {
+				doc, err = parseHTML(rel, info.ModTime(), raw)
+			}
 			if err != nil {
+				if legacy {
+					return fmt.Errorf("parse %s: %w", rel, err)
+				}
 				log.Printf("skip %s: %v", rel, err)
 				return nil
 			}
@@ -151,7 +168,7 @@ func Load(root string) (*Index, error) {
 	return ix, nil
 }
 
-// Page returns the markdown doc for a URL path such as /about or /posts/hello.
+// Page returns the HTML doc for a URL path such as /about or /posts/hello.
 func (ix *Index) Page(urlPath string) (Doc, bool) {
 	d, ok := ix.byURL[urlPath]
 	if !ok || d.Kind == KindBlurb {
@@ -160,13 +177,13 @@ func (ix *Index) Page(urlPath string) (Doc, bool) {
 	return d, true
 }
 
-// Static returns the content-relative path for a non-markdown URL.
+// Static returns the content-relative path for an asset URL.
 func (ix *Index) Static(urlPath string) (string, bool) {
 	rel, ok := ix.static[urlPath]
 	return rel, ok
 }
 
-// Blurb is content/index.md when it is published.
+// Blurb is content/index.html when it is published.
 func (ix *Index) Blurb() (Doc, bool) {
 	for _, d := range ix.Docs {
 		if d.Kind == KindBlurb && !d.Draft {
@@ -251,8 +268,8 @@ func (ix *Index) hasSlug(slug string) bool {
 	return false
 }
 
-// WritePost creates content/posts/<slug>.md.
-// The posted date is written in the front matter.
+// WritePost creates content/posts/<slug>.html.
+// The posted date is written in the HTML head metadata.
 func WritePost(root string, in Input) (Doc, error) {
 	slug, when, err := normalize(in)
 	if err != nil {
@@ -265,7 +282,7 @@ func WritePost(root string, in Input) (Doc, error) {
 	if ix.hasSlug(slug) {
 		return Doc{}, ErrExists
 	}
-	rel := postsDir + "/" + slug + ".md"
+	rel := postsDir + "/" + slug + ".html"
 	doc := Doc{
 		Rel:   rel,
 		URL:   "/posts/" + slug,
@@ -416,39 +433,20 @@ func normalize(in Input) (string, time.Time, error) {
 }
 
 func save(root string, doc *Doc) error {
-	if !strings.HasSuffix(doc.Body, "\n") {
-		doc.Body += "\n"
-	}
 	full, err := safeJoin(root, doc.Rel)
 	if err != nil {
 		return err
 	}
-	data, err := encode(*doc)
+	body, err := NormalizeHTML(doc.Body)
+	if err != nil {
+		return err
+	}
+	doc.Body = body
+	data, err := encode(root, *doc)
 	if err != nil {
 		return err
 	}
 	return writeAtomic(filepath.Dir(full), full, data)
-}
-
-func encode(doc Doc) ([]byte, error) {
-	y, err := yaml.Marshal(front{
-		Title: doc.Title,
-		Date:  doc.Date.UTC(),
-		Draft: doc.Draft,
-	})
-	if err != nil {
-		return nil, err
-	}
-	body := doc.Body
-	if !strings.HasSuffix(body, "\n") {
-		body += "\n"
-	}
-	var b bytes.Buffer
-	b.WriteString("---\n")
-	b.Write(y)
-	b.WriteString("---\n")
-	b.WriteString(body)
-	return b.Bytes(), nil
 }
 
 // writeAtomic replaces dest by renaming a finished temp file over it.
@@ -502,7 +500,7 @@ func syncDir(dir string) error {
 	return cerr
 }
 
-func parse(rel string, mod time.Time, raw []byte) (Doc, error) {
+func parseMarkdown(rel string, mod time.Time, raw []byte) (Doc, error) {
 	fm, body, err := splitFront(raw)
 	if err != nil {
 		return Doc{}, err
@@ -534,10 +532,10 @@ func parse(rel string, mod time.Time, raw []byte) (Doc, error) {
 	return doc, nil
 }
 
-// classify names a post from its filename. The posted date is front matter.
+// classify names a post from its filename; dates live in document metadata.
 func classify(rel string) (Kind, string, string) {
-	stem := strings.TrimSuffix(rel, ".md")
-	if rel == "index.md" {
+	stem := strings.TrimSuffix(strings.TrimSuffix(rel, ".md"), ".html")
+	if rel == "index.md" || rel == "index.html" {
 		return KindBlurb, "/", ""
 	}
 	base := path.Base(stem)

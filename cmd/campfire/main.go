@@ -20,6 +20,8 @@ import (
 func main() {
 	contentFlag := flag.String("content", "", "content directory (env CAMPFIRE_CONTENT, default content next to the binary)")
 	addrFlag := flag.String("addr", "", "listen address (env CAMPFIRE_ADDR, default 127.0.0.1:8080)")
+	migrate := flag.Bool("migrate", false, "convert Markdown to HTML, preserve originals in .markdown-backup, then exit")
+	rebuild := flag.Bool("rebuild", false, "rebuild saved HTML with current templates and site settings, then exit")
 	flag.Parse()
 
 	root, err := contentRoot(*contentFlag)
@@ -37,6 +39,20 @@ func main() {
 	}
 	if err := content.Seed(root); err != nil {
 		log.Fatalf("content directory: %v", err)
+	}
+	if *migrate {
+		if err := content.Migrate(root); err != nil {
+			log.Fatal(err)
+		}
+		log.Print("HTML migration complete; originals are in .markdown-backup")
+		return
+	}
+	if *rebuild {
+		if err := content.Rebuild(root); err != nil {
+			log.Fatal(err)
+		}
+		log.Print("HTML pages rebuilt")
+		return
 	}
 	srv, err := server.New(root)
 	if err != nil {
