@@ -247,3 +247,61 @@ func TestHTMLPublicationSnapshot(t *testing.T) {
 		t.Fatal("unpublished content leaked")
 	}
 }
+
+func TestMetaDescriptionLifecycle(t *testing.T) {
+	s, root := htmlServer(t)
+	description := `A "quoted" summary & <script>alert(1)</script>.`
+	input, _ := json.Marshal(map[string]any{"format": "html", "slug": "described", "body": "<p>Body.</p>", "metaDescription": description})
+	req := httptest.NewRequest(http.MethodPost, "/api/posts", strings.NewReader(string(input)))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/vnd.campfire.description+json")
+	created := httptest.NewRecorder()
+	s.Handler().ServeHTTP(created, req)
+	if created.Code != 201 {
+		t.Fatalf("create: %d %s", created.Code, created.Body)
+	}
+	check := func(want string) {
+		t.Helper()
+		read := htmlRequest(s, http.MethodGet, "/api/posts/described", "")
+		var post postJSON
+		if err := json.Unmarshal(read.Body.Bytes(), &post); err != nil {
+			t.Fatal(err)
+		}
+		if post.MetaDescription != want {
+			t.Fatalf("description = %q, want %q", post.MetaDescription, want)
+		}
+		page := htmlRequest(s, http.MethodGet, "/posts/described", "").Body.String()
+		if strings.Contains(page, "<script>") {
+			t.Fatal("description injected HTML")
+		}
+		count := strings.Count(page, `name="description"`)
+		if want == "" && count != 0 || want != "" && count != 1 {
+			t.Fatalf("description tags: %d", count)
+		}
+	}
+	check(description)
+	// A custom layout's generic description must not duplicate or replace the post's value.
+	layout := filepath.Join(root, "templates/layout.html")
+	raw, err := os.ReadFile(layout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = []byte(strings.Replace(string(raw), "</head>", `<meta name="description" content="generic"></head>`, 1))
+	if err := os.WriteFile(layout, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := content.Rebuild(root); err != nil {
+		t.Fatal(err)
+	}
+	check(description)
+	// An old client omits the field; explicit empty from a new client clears it.
+	for _, test := range []struct{ extra, want string }{
+		{"", description}, {`,"metaDescription":"Replacement"`, "Replacement"}, {`,"metaDescription":""`, ""},
+	} {
+		updated := htmlRequest(s, http.MethodPut, "/api/posts/described", `{"format":"html","body":"<p>Edited.</p>"`+test.extra+`}`)
+		if updated.Code != 200 {
+			t.Fatalf("update: %d %s", updated.Code, updated.Body)
+		}
+		check(test.want)
+	}
+}

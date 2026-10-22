@@ -42,25 +42,27 @@ const (
 
 // Doc is one HTML document with its editable body.
 type Doc struct {
-	Rel   string
-	URL   string
-	Slug  string
-	Title string
-	Date  time.Time
-	Dated bool
-	Draft bool
-	Body  string
-	Kind  Kind
+	MetaDescription string
+	Rel             string
+	URL             string
+	Slug            string
+	Title           string
+	Date            time.Time
+	Dated           bool
+	Draft           bool
+	Body            string
+	Kind            Kind
 }
 
 // Input is a post write.
 // A zero Date means now.
 type Input struct {
-	Title string
-	Slug  string
-	Date  time.Time
-	Draft bool
-	Body  string
+	MetaDescription *string
+	Title           string
+	Slug            string
+	Date            time.Time
+	Draft           bool
+	Body            string
 }
 
 // Index is one scan of a content directory.
@@ -294,6 +296,9 @@ func WritePost(root string, in Input) (Doc, error) {
 		Body:  in.Body,
 		Kind:  KindPost,
 	}
+	if in.MetaDescription != nil {
+		doc.MetaDescription = strings.TrimSpace(*in.MetaDescription)
+	}
 	if err := save(root, &doc); err != nil {
 		return Doc{}, err
 	}
@@ -325,6 +330,9 @@ func UpdatePost(root, slug string, in Input) (Doc, error) {
 	doc.Dated = true
 	doc.Draft = in.Draft
 	doc.Body = in.Body
+	if in.MetaDescription != nil {
+		doc.MetaDescription = strings.TrimSpace(*in.MetaDescription)
+	}
 	if err := save(root, &doc); err != nil {
 		return Doc{}, err
 	}

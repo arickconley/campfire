@@ -157,7 +157,7 @@ func parseHTML(rel string, mod time.Time, raw []byte) (Doc, error) {
 					continue
 				}
 				name := attribute(c, "name")
-				if !strings.HasPrefix(name, "campfire-") {
+				if name != "description" && !strings.HasPrefix(name, "campfire-") {
 					continue
 				}
 				if _, exists := meta[name]; exists {
@@ -192,7 +192,7 @@ func parseHTML(rel string, mod time.Time, raw []byte) (Doc, error) {
 		return Doc{}, err
 	}
 	kind, u, slug := classify(rel)
-	doc := Doc{Rel: rel, URL: u, Slug: slug, Title: title, Draft: draft == "true", Body: source, Kind: kind}
+	doc := Doc{MetaDescription: meta["description"], Rel: rel, URL: u, Slug: slug, Title: title, Draft: draft == "true", Body: source, Kind: kind}
 	if date != "" {
 		doc.Date, err = time.Parse(time.RFC3339, date)
 		if err != nil {
@@ -281,6 +281,17 @@ func encodeWithRenderer(root string, doc Doc, r *render.Renderer) ([]byte, error
 	})
 	if head == nil {
 		return nil, errors.New("page template has no head")
+	}
+	// Replace template descriptions so each saved document has at most one.
+	for child := head.FirstChild; child != nil; {
+		next := child.NextSibling
+		if child.Type == html.ElementNode && child.Data == "meta" && strings.EqualFold(attribute(child, "name"), "description") {
+			head.RemoveChild(child)
+		}
+		child = next
+	}
+	if doc.MetaDescription != "" {
+		head.AppendChild(&html.Node{Type: html.ElementNode, Data: "meta", DataAtom: atom.Meta, Attr: []html.Attribute{{Key: "name", Val: "description"}, {Key: "content", Val: doc.MetaDescription}}})
 	}
 	date := ""
 	if doc.Dated {

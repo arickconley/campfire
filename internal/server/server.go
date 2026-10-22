@@ -719,18 +719,19 @@ func article(d content.Doc, html template.HTML) render.Article {
 
 func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 	ct := r.Header.Get("Content-Type")
-	if ct != "" && !strings.HasPrefix(ct, "application/json") && ct != "application/vnd.campfire.html+json" {
+	if ct != "" && !strings.HasPrefix(ct, "application/json") && ct != "application/vnd.campfire.html+json" && ct != "application/vnd.campfire.description+json" {
 		writeErr(w, http.StatusUnsupportedMediaType, "content type")
 		return content.Input{}, false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	var req struct {
-		Title  string `json:"title"`
-		Slug   string `json:"slug"`
-		Date   string `json:"date"`
-		Draft  bool   `json:"draft"`
-		Body   string `json:"body"`
-		Format string `json:"format"`
+		MetaDescription *string `json:"metaDescription"`
+		Title           string  `json:"title"`
+		Slug            string  `json:"slug"`
+		Date            string  `json:"date"`
+		Draft           bool    `json:"draft"`
+		Body            string  `json:"body"`
+		Format          string  `json:"format"`
 	}
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
@@ -746,7 +747,7 @@ func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 		writeErr(w, http.StatusBadRequest, "HTML body format required; update your Campfire app")
 		return content.Input{}, false
 	}
-	in := content.Input{Title: req.Title, Slug: req.Slug, Draft: req.Draft, Body: req.Body}
+	in := content.Input{MetaDescription: req.MetaDescription, Title: req.Title, Slug: req.Slug, Draft: req.Draft, Body: req.Body}
 	if req.Date != "" {
 		t, err := time.Parse(time.RFC3339, req.Date)
 		if err != nil {
@@ -759,23 +760,25 @@ func readPost(w http.ResponseWriter, r *http.Request) (content.Input, bool) {
 }
 
 type postJSON struct {
-	Slug   string `json:"slug"`
-	Title  string `json:"title"`
-	Date   string `json:"date"`
-	Draft  bool   `json:"draft"`
-	URL    string `json:"url"`
-	Body   string `json:"body,omitempty"`
-	Format string `json:"format"`
+	MetaDescription string `json:"metaDescription"`
+	Slug            string `json:"slug"`
+	Title           string `json:"title"`
+	Date            string `json:"date"`
+	Draft           bool   `json:"draft"`
+	URL             string `json:"url"`
+	Body            string `json:"body,omitempty"`
+	Format          string `json:"format"`
 }
 
 func toJSON(cfg site.Config, d content.Doc, withBody bool) postJSON {
 	p := postJSON{
-		Format: "html",
-		Slug:   d.Slug,
-		Title:  d.Title,
-		Date:   d.Date.UTC().Format(time.RFC3339),
-		Draft:  d.Draft,
-		URL:    postURL(cfg, d.URL),
+		MetaDescription: d.MetaDescription,
+		Format:          "html",
+		Slug:            d.Slug,
+		Title:           d.Title,
+		Date:            d.Date.UTC().Format(time.RFC3339),
+		Draft:           d.Draft,
+		URL:             postURL(cfg, d.URL),
 	}
 	if withBody {
 		p.Body = d.Body
