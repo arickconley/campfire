@@ -108,7 +108,7 @@ article > header h2 a {
 
 article p { margin: 0.8rem 0; }
 
-article > div {
+article > div:not([data-campfire-body]) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -116,7 +116,7 @@ article > div {
   overflow: hidden;
 }
 
-article > div > * { margin: 0; }
+article > div:not([data-campfire-body]) > * { margin: 0; }
 
 article pre {
   background: #f7fbfc;

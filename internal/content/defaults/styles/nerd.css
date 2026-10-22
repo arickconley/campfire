@@ -129,7 +129,7 @@ article h4 {
 
 article p { margin: 0.7rem 0; }
 
-article > div {
+article > div:not([data-campfire-body]) {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -137,7 +137,7 @@ article > div {
   overflow: hidden;
 }
 
-article > div > * { margin: 0; }
+article > div:not([data-campfire-body]) > * { margin: 0; }
 
 strong { color: var(--bright); }
 

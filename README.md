@@ -87,6 +87,8 @@ Drafts stay available through the authenticated API and are excluded from public
 
 Stop the server before maintenance commands. Rebuilding preserves post bodies, dates, titles, URLs, and draft status while applying the current layout. Stylesheet-only edits take effect immediately.
 
+If an existing site's individual posts stop after three lines, update its `content/styles/*.css`: change both `article > div` selectors to `article > div:not([data-campfire-body])`. This keeps homepage excerpts clipped while showing full post bodies and their paragraph spacing. Updating the binary does not replace existing stylesheets; no page rebuild is needed for this CSS fix.
+
 Replace `.token` to rotate it. Delete it and writes stop.
 
 ## API
