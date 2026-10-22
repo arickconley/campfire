@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"time"
 
+	xhtml "golang.org/x/net/html"
+
 	"campfire/web"
 )
 
@@ -35,6 +37,7 @@ type Article struct {
 
 // View is the data for an HTML page.
 type View struct {
+	SEO        *SEO
 	SiteTitle  string
 	SiteDesc   string
 	HeadTitle  string
@@ -129,7 +132,23 @@ func (r *Renderer) write(root string, w io.Writer, name string, v View) error {
 		return err
 	}
 	v.Main = template.HTML(buf.String())
-	return set.ExecuteTemplate(w, "layout", v)
+	if v.SEO == nil {
+		return set.ExecuteTemplate(w, "layout", v)
+	}
+	buf.Reset()
+	if err := set.ExecuteTemplate(&buf, "layout", v); err != nil {
+		return err
+	}
+	tree, err := xhtml.Parse(&buf)
+	if err != nil {
+		return err
+	}
+	head := firstElement(tree, "head")
+	if head == nil {
+		return errors.New("page template has no head")
+	}
+	v.SEO.Apply(head)
+	return xhtml.Render(w, tree)
 }
 
 // set clones the built-in templates and overlays content/templates.

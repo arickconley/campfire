@@ -30,3 +30,18 @@ func TestLoadFile(t *testing.T) {
 		t.Fatalf("%+v", cfg)
 	}
 }
+
+func TestPublicURL(t *testing.T) {
+	for _, tc := range []struct{ base, route, want string }{
+		{"https://example.test/", "/posts/a", "https://example.test/posts/a"},
+		{"https://example.test", "/", "https://example.test/"},
+		{"https://example.test/blog/", "/a & b", "https://example.test/blog/a%20&%20b"},
+		{"", "/", ""}, {"example.test", "/", ""}, {"javascript:alert(1)", "/", ""},
+		{"https://user:pass@example.test", "/", ""}, {"https://example.test/?x=1", "/", ""},
+		{"https://example.test/#fragment", "/", ""},
+	} {
+		if got := (Config{URL: tc.base}).PublicURL(tc.route); got != tc.want {
+			t.Errorf("%q + %q = %q, want %q", tc.base, tc.route, got, tc.want)
+		}
+	}
+}

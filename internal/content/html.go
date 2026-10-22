@@ -282,17 +282,16 @@ func encodeWithRenderer(root string, doc Doc, r *render.Renderer) ([]byte, error
 	if head == nil {
 		return nil, errors.New("page template has no head")
 	}
-	// Replace template descriptions so each saved document has at most one.
-	for child := head.FirstChild; child != nil; {
-		next := child.NextSibling
-		if child.Type == html.ElementNode && child.Data == "meta" && strings.EqualFold(attribute(child, "name"), "description") {
-			head.RemoveChild(child)
-		}
-		child = next
+	kind := "website"
+	if doc.Kind == KindPost {
+		kind = "article"
 	}
-	if doc.MetaDescription != "" {
-		head.AppendChild(&html.Node{Type: html.ElementNode, Data: "meta", DataAtom: atom.Meta, Attr: []html.Attribute{{Key: "name", Val: "description"}, {Key: "content", Val: doc.MetaDescription}}})
+	title := doc.Title
+	if title == "" {
+		title = cfg.Title
 	}
+	render.SEO{URL: cfg.PublicURL(doc.URL), Title: title, Description: doc.MetaDescription,
+		SiteName: cfg.Title, Type: kind, Body: body}.Apply(head)
 	date := ""
 	if doc.Dated {
 		date = doc.Date.UTC().Format(time.RFC3339)

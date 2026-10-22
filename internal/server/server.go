@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -59,6 +60,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /feed.xml", s.feed)
+	mux.HandleFunc("GET /sitemap.xml", s.sitemap)
+	mux.HandleFunc("GET /robots.txt", s.robots)
 	mux.HandleFunc("POST /api/posts", s.create)
 	mux.HandleFunc("GET /api/posts", s.list)
 	mux.HandleFunc("GET /api/posts/{slug}", s.get)
@@ -362,6 +365,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.view(cfg, ix)
+	v.SEO = &render.SEO{URL: cfg.PublicURL("/"), Title: cfg.Title, Description: cfg.Description, SiteName: cfg.Title, Type: "website"}
 	v.Posts = posts
 	v.Empty = len(posts) == 0
 	if len(posts) > 0 {
@@ -371,6 +375,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	}
 	if b, found := ix.Blurb(); found {
 		v.Blurb = template.HTML(b.Body)
+		v.SEO.Body = b.Body
 	}
 	s.writeHTML(w, http.StatusOK, func(w io.Writer) error {
 		return s.Render.Feed(s.Root, w, v)
@@ -390,6 +395,12 @@ func (s *Server) page(w http.ResponseWriter, r *http.Request) {
 		if doc.Draft {
 			s.mu.RUnlock()
 			s.notFound(w, cfg, ix)
+			return
+		}
+		if r.URL.Path != doc.URL {
+			s.mu.RUnlock()
+			target := r.URL.ResolveReference(&url.URL{Path: doc.URL, RawQuery: r.URL.RawQuery})
+			http.Redirect(w, r, target.RequestURI(), http.StatusMovedPermanently)
 			return
 		}
 		defer s.mu.RUnlock()

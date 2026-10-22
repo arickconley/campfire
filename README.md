@@ -91,6 +91,23 @@ If an existing site's individual posts stop after three lines, update its `conte
 
 Replace `.token` to rotate it. Delete it and writes stop.
 
+## Search and sharing metadata
+
+Set `url` in `site.yaml` to your public HTTP(S) site URL, such as `https://thoughts.arick.io`. Campfire uses this configured URL for search metadata, never the incoming request's hostname.
+
+- `/sitemap.xml` automatically lists the home page and published posts and pages. Drafts, assets, and API endpoints are excluded. It updates as content changes. Without a valid configured URL, it returns 503. The single sitemap supports up to 50,000 URLs and 50 MB; modification dates are omitted because the post date is not a reliable last-edit timestamp.
+- `/robots.txt` allows crawling by default and advertises the sitemap. If `content/robots.txt` exists, its rules are preserved and the sitemap declaration is appended when missing. A CDN may modify or replace this response; check the public URL after deployment.
+- Saved pages receive one absolute canonical URL. Trailing-slash page and post requests redirect to the canonical path, preserving query parameters.
+- Open Graph tags include the title, site name, page type, canonical URL, and description when supplied. Posts use `article`; other pages use `website`. A template's `og:image` takes precedence; otherwise the first content image is used, with relative image URLs resolved to absolute HTTP(S) URLs. Text-only content has no generated image. The homepage uses the site description and any image in its home blurb.
+
+This works with existing custom layout templates; no new template placeholders are required. Generated canonical and basic Open Graph tags replace conflicting template values. Existing saved pages gain the tags on their next save or rebuild. After upgrading, stop the server and run:
+
+```bash
+./campfire -content /path/to/content -rebuild
+```
+
+Restart afterward. Rebuild again if you change the public URL or site identity. Rebuilding preserves editable content and post descriptions; it does not generate missing descriptions or images.
+
 ## API
 
 ```

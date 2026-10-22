@@ -3,6 +3,7 @@ package site
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,18 @@ type Config struct {
 	URL         string `yaml:"url"`
 	// Style names a file in content/styles (paper) or a content-relative path (style.css).
 	Style string `yaml:"style"`
+}
+
+// PublicURL uses only the configured origin, never an untrusted request Host.
+// Empty means the site has no valid public HTTP(S) URL configured.
+func (c Config) PublicURL(route string) string {
+	u, err := url.Parse(strings.TrimSpace(c.URL))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/" + strings.TrimLeft(route, "/")
+	u.RawPath = ""
+	return u.String()
 }
 
 // Load reads root/site.yaml. A missing file yields a default title.
