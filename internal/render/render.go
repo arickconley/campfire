@@ -77,7 +77,19 @@ type AtomEntry struct {
 }
 
 // Renderer holds the site templates. Post bodies are already HTML.
-type Renderer struct{ tmpl *template.Template }
+type Renderer struct {
+	tmpl           *template.Template
+	overrideName   string
+	overrideSource string
+}
+
+// WithTemplate validates syntax and previews an override without changing files.
+func (r *Renderer) WithTemplate(name, source string) (*Renderer, error) {
+	if _, err := template.New(name).Parse(source); err != nil {
+		return nil, err
+	}
+	return &Renderer{tmpl: r.tmpl, overrideName: name, overrideSource: source}, nil
+}
 
 func New() (*Renderer, error) {
 	tmpl, err := template.ParseFS(web.FS, "templates/*.html")
@@ -127,7 +139,10 @@ func (r *Renderer) set(root string) (*template.Template, error) {
 		return nil, err
 	}
 	if root == "" {
-		return set, nil
+		if r.overrideName != "" {
+			_, err = set.New(r.overrideName).Parse(r.overrideSource)
+		}
+		return set, err
 	}
 	dir := filepath.Join(root, "templates")
 	for _, name := range templateNames {
@@ -147,6 +162,11 @@ func (r *Renderer) set(root string) (*template.Template, error) {
 			continue
 		}
 		set = next
+	}
+	if r.overrideName != "" {
+		if _, err := set.New(r.overrideName).Parse(r.overrideSource); err != nil {
+			return nil, err
+		}
 	}
 	return set, nil
 }

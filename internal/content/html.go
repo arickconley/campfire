@@ -208,6 +208,14 @@ func parseHTML(rel string, mod time.Time, raw []byte) (Doc, error) {
 
 // encode builds the complete document once, before the atomic file replacement.
 func encode(root string, doc Doc) ([]byte, error) {
+	r, err := render.New()
+	if err != nil {
+		return nil, err
+	}
+	return encodeWithRenderer(root, doc, r)
+}
+
+func encodeWithRenderer(root string, doc Doc, r *render.Renderer) ([]byte, error) {
 	body, err := NormalizeHTML(doc.Body)
 	if err != nil {
 		return nil, err
@@ -257,10 +265,6 @@ func encode(root string, doc Doc) ([]byte, error) {
 		a.DateISO = doc.Date.UTC().Format("2006-01-02")
 	}
 	v.Article = a
-	r, err := render.New()
-	if err != nil {
-		return nil, err
-	}
 	var page bytes.Buffer
 	if err := r.Page(root, &page, v); err != nil {
 		return nil, err

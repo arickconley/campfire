@@ -64,9 +64,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/posts/{slug}", s.get)
 	mux.HandleFunc("PUT /api/posts/{slug}", s.update)
 	mux.HandleFunc("DELETE /api/posts/{slug}", s.delete)
+	mux.HandleFunc("GET /api/site/files", s.siteFiles)
+	mux.HandleFunc("GET /api/site/file", s.siteFile)
+	mux.HandleFunc("PUT /api/site/file", s.siteFile)
 	mux.HandleFunc("GET /{path...}", s.page)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/posts" || strings.HasPrefix(r.URL.Path, "/api/posts/") {
+		if r.URL.Path == "/api/posts" || strings.HasPrefix(r.URL.Path, "/api/posts/") || strings.HasPrefix(r.URL.Path, "/api/site/") {
+			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("X-Campfire-Content-Format", "html")
 		}
 		if r.URL.Path == "/favicon.ico" {
@@ -788,6 +792,10 @@ func postURL(cfg site.Config, urlPath string) string {
 
 func writeStoreErr(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, content.ErrConflict):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, content.ErrSiteFile):
+		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, content.ErrExists):
 		writeErr(w, http.StatusConflict, "post exists")
 	case errors.Is(err, content.ErrNotFound):

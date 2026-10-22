@@ -110,6 +110,18 @@ curl -s -X POST http://127.0.0.1:8080/api/posts \
 
 Send `Authorization: Bearer` and the token. JSON fields are `format`, `title`, `slug`, `date`, `draft`, and `body`. Send `format: "html"` and an HTML fragment in `body`; both are required. Responses also identify the format as `html` and include `X-Campfire-Content-Format: html`. The native apps use `application/vnd.campfire.html+json` for saves so older servers reject the request before writing an incompatible body. The server validates HTML and rejects scripts, event handlers, unsafe URLs, and unsupported elements before replacing a saved file. `date` is RFC3339. Leave `date` off on create and Campfire uses the current time. Send the old `date` on update or the post jumps to now.
 
+## Page Editor
+
+The iOS and macOS apps include **Page Editor** for the selected blog. Edit existing pages (including `about.html` and the home blurb in `index.html`) with rich text, and edit templates and stylesheets as source. Saving a page preserves its date and path. Saving a template validates it against the saved documents, then rebuilds them; templates that remove or change the editable body are rejected. CSS saves take effect without rebuilding, but an existing CDN or browser cache may still need clearing.
+
+The editor uses the same write token as posts:
+
+- `GET /api/site/files`: list editable pages, CSS files, and the five supported templates.
+- `GET /api/site/file?path=about.html`: read one file.
+- `PUT /api/site/file?path=about.html`: save `body`, `title`, `draft`, and the `revision` from the last read. A stale revision returns 409; reopen the file before trying again. For templates and CSS, `body` is source and page metadata is ignored.
+
+These endpoints do not create/delete pages or expose arbitrary files, configuration, tokens, or symlinks. Missing template overrides can be saved using the supplied starter source. API responses are not cacheable. Saves require the updated server; older servers remain usable for post editing. Template rebuilds validate all documents before writing; an I/O failure during replacement may require fixing the storage issue and running `-rebuild` to finish applying the layout.
+
 ## Existing Markdown sites
 
 Update the server and both apps together. Older clients are rejected when saving because their bodies are Markdown. New clients reject incompatible server responses before editing.
