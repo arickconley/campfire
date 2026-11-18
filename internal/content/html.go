@@ -216,10 +216,6 @@ func encode(root string, doc Doc) ([]byte, error) {
 }
 
 func encodeWithRenderer(root string, doc Doc, r *render.Renderer) ([]byte, error) {
-	body, err := NormalizeHTML(doc.Body)
-	if err != nil {
-		return nil, err
-	}
 	cfg, err := site.Load(root)
 	if err != nil {
 		return nil, err
@@ -228,10 +224,18 @@ func encodeWithRenderer(root string, doc Doc, r *render.Renderer) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
+	return encodeDoc(root, cfg, ix, doc, r)
+}
+
+func encodeDoc(root string, cfg site.Config, ix *Index, doc Doc, r *render.Renderer) ([]byte, error) {
+	body, err := NormalizeHTML(doc.Body)
+	if err != nil {
+		return nil, err
+	}
 	v := render.View{SiteTitle: cfg.Title, SiteDesc: cfg.Description, HeadTitle: cfg.Title, Back: "/"}
 	if cfg.Style != "" {
 		style := cfg.Style
-		if !strings.Contains(style, "/") && !strings.HasSuffix(style, ".css") {
+		if !strings.Contains(style, "/") && !strings.HasSuffix(strings.ToLower(style), ".css") {
 			style = "styles/" + style + ".css"
 		}
 		if _, ok := ix.Static("/" + strings.TrimPrefix(style, "/")); ok {

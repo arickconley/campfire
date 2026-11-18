@@ -70,6 +70,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/site/files", s.siteFiles)
 	mux.HandleFunc("GET /api/site/file", s.siteFile)
 	mux.HandleFunc("PUT /api/site/file", s.siteFile)
+	mux.HandleFunc("GET /api/site/settings", s.siteSettings)
+	mux.HandleFunc("PUT /api/site/settings", s.siteSettings)
 	mux.HandleFunc("GET /{path...}", s.page)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/posts" || strings.HasPrefix(r.URL.Path, "/api/posts/") || strings.HasPrefix(r.URL.Path, "/api/site/") {
@@ -808,7 +810,7 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, content.ErrConflict):
 		writeErr(w, http.StatusConflict, err.Error())
-	case errors.Is(err, content.ErrSiteFile):
+	case errors.Is(err, content.ErrSiteFile), errors.Is(err, content.ErrSiteSettings):
 		writeErr(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, content.ErrExists):
 		writeErr(w, http.StatusConflict, "post exists")

@@ -177,3 +177,112 @@ func TestSiteEditor(t *testing.T) {
 		t.Fatal("template symlink exposed")
 	}
 }
+
+func TestSiteSettings(t *testing.T) {
+	s, root := htmlServer(t)
+	read := func() content.SiteSettings {
+		t.Helper()
+		got := htmlRequest(s, "GET", "/api/site/settings", "")
+		if got.Code != 200 || got.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("read settings: %d %s", got.Code, got.Body)
+		}
+		var out content.SiteSettings
+		if err := json.Unmarshal(got.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	save := func(in content.SiteSettings) *httptest.ResponseRecorder {
+		t.Helper()
+		body, err := json.Marshal(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return htmlRequest(s, "PUT", "/api/site/settings", string(body))
+	}
+	for _, method := range []string{"GET", "PUT"} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(method, "/api/site/settings", nil))
+		if w.Code != 401 {
+			t.Fatalf("unauthenticated %s: %d", method, w.Code)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "styles/custom.css"), []byte("body { color: navy; }"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, ".token"), filepath.Join(root, "styles/secret.css")); err != nil {
+		t.Fatal(err)
+	}
+	initial := read()
+	if initial.Title != "HTML Site" || initial.Style != "paper" || !initial.UsesStyle || initial.Revision == "" {
+		t.Fatalf("initial: %+v", initial)
+	}
+	wantStyles := "custom,ink,nerd,paper,plain"
+	if got := strings.Join(initial.Styles, ","); got != wantStyles {
+		t.Fatalf("styles = %q, want %q", got, wantStyles)
+	}
+	next := initial
+	next.Title = "  Field Notes  "
+	next.Description = "  Short observations.  "
+	next.URL = "https://notes.example/"
+	next.Style = "ink"
+	res := save(next)
+	if res.Code != 200 {
+		t.Fatalf("save: %d %s", res.Code, res.Body)
+	}
+	var updated content.SiteSettings
+	if err := json.Unmarshal(res.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != "Field Notes" || updated.Description != "Short observations." || updated.URL != "https://notes.example" || updated.Style != "ink" || updated.Revision == initial.Revision {
+		t.Fatalf("updated: %+v", updated)
+	}
+	// Stale revision must be rejected without clobbering newer settings.
+	if got := save(next); got.Code != 409 {
+		t.Fatalf("stale save: %d %s", got.Code, got.Body)
+	}
+	// Home page, saved posts, saved pages, and sitemap must reflect the new settings immediately.
+	for _, route := range []string{"/", "/posts/hello", "/about"} {
+		got := htmlRequest(s, "GET", route, "")
+		if got.Code != 200 {
+			t.Fatalf("%s: %d", route, got.Code)
+		}
+		page := got.Body.String()
+		canonical := "https://notes.example" + route
+		for _, want := range []string{`href="/styles/ink.css"`, "Field Notes", `rel="canonical" href="` + canonical + `"`} {
+			if !strings.Contains(page, want) {
+				t.Fatalf("%s missing %s: %s", route, want, page)
+			}
+		}
+		if route == "/posts/hello" && !strings.Contains(page, "The fire is lit.") {
+			t.Fatalf("post body lost on rebuild: %s", page)
+		}
+	}
+	if got := htmlRequest(s, "GET", "/sitemap.xml", ""); got.Code != 200 || !strings.Contains(got.Body.String(), "https://notes.example/posts/hello") {
+		t.Fatalf("sitemap: %d %s", got.Code, got.Body)
+	}
+	for _, bad := range []func(*content.SiteSettings){
+		func(c *content.SiteSettings) { c.Title = "   " },
+		func(c *content.SiteSettings) { c.URL = "notes.example" },
+		func(c *content.SiteSettings) { c.URL = "javascript:alert(1)" },
+		func(c *content.SiteSettings) { c.URL = "https://notes.example?x=1" },
+		func(c *content.SiteSettings) { c.URL = "https://user:pass@notes.example" },
+		func(c *content.SiteSettings) { c.Style = "missing" },
+		func(c *content.SiteSettings) { c.Style = "../.token" },
+		func(c *content.SiteSettings) { c.Style = "about.html" },
+		func(c *content.SiteSettings) { c.Style = "secret" },
+	} {
+		attempt := read()
+		bad(&attempt)
+		if got := save(attempt); got.Code != 400 {
+			t.Fatalf("accepted invalid %+v: %d %s", attempt, got.Code, got.Body)
+		}
+	}
+	// Custom layout without {{.Style}} reports UsesStyle = false.
+	if err := os.WriteFile(filepath.Join(root, "templates/layout.html"), []byte(`<html><head><link rel="stylesheet" href="/styles/custom.css"></head><body>{{.Main}}</body></html>`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if read().UsesStyle {
+		t.Fatal("expected UsesStyle = false for hardcoded layout stylesheet")
+	}
+}

@@ -89,6 +89,23 @@ Stop the server before maintenance commands. Rebuilding preserves post bodies, d
 
 If an existing site's individual posts stop after three lines, update its `content/styles/*.css`: change both `article > div` selectors to `article > div:not([data-campfire-body])`. This keeps homepage excerpts clipped while showing full post bodies and their paragraph spacing. Updating the binary does not replace existing stylesheets; no page rebuild is needed for this CSS fix.
 
+The `paper` and `plain` starter styles automatically follow the device's dark-mode preference. The `ink` and `nerd` styles already have dark palettes. Existing sites keep their own CSS when the server is upgraded. Update their stylesheet through Page Editor or on disk; no page rebuild is needed. For an existing or customized `paper.css`, append this block to retain the current light appearance and typography:
+
+```css
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #152025;
+    --ink: #e3edf1;
+    --muted: #a6bcc5;
+    --link: #8dcedf;
+  }
+  article pre { background: #203039; }
+}
+```
+
+Purge the stylesheet's CDN cache if visitors still receive the old CSS.
+
 Replace `.token` to rotate it. Delete it and writes stop.
 
 ## Search and sharing metadata
@@ -131,15 +148,17 @@ Posts also accept `metaDescription` (plain text). Omit it on update to preserve 
 
 ## Page Editor
 
-The iOS and macOS apps include **Page Editor** for the selected blog. Edit existing pages (including `about.html` and the home blurb in `index.html`) with rich text, and edit templates and stylesheets as source. Saving a page preserves its date and path. Saving a template validates it against the saved documents, then rebuilds them; templates that remove or change the editable body are rejected. CSS saves take effect without rebuilding, but an existing CDN or browser cache may still need clearing.
+The iOS and macOS apps include **Page Editor** for the selected blog. Update site settings (`title`, `description`, `url`, and `style` in `site.yaml`), edit existing pages (including `about.html` and the home blurb in `index.html`) with rich text, and edit templates and stylesheets as source. Saving a page preserves its date and path. Saving site settings or a template validates against the saved documents, then rebuilds them; templates that remove or change the editable body are rejected. CSS saves take effect without rebuilding, but an existing CDN or browser cache may still need clearing.
 
 The editor uses the same write token as posts:
 
+- `GET /api/site/settings`: read `site.yaml` settings, available stylesheets, and a `revision`.
+- `PUT /api/site/settings`: save `title`, `description`, `url`, `style`, and `revision`, then rebuild saved pages.
 - `GET /api/site/files`: list editable pages, CSS files, and the five supported templates.
 - `GET /api/site/file?path=about.html`: read one file.
 - `PUT /api/site/file?path=about.html`: save `body`, `title`, `draft`, and the `revision` from the last read. A stale revision returns 409; reopen the file before trying again. For templates and CSS, `body` is source and page metadata is ignored.
 
-These endpoints do not create/delete pages or expose arbitrary files, configuration, tokens, or symlinks. Missing template overrides can be saved using the supplied starter source. API responses are not cacheable. Saves require the updated server; older servers remain usable for post editing. Template rebuilds validate all documents before writing; an I/O failure during replacement may require fixing the storage issue and running `-rebuild` to finish applying the layout.
+These endpoints do not create/delete pages or expose arbitrary files, tokens, or symlinks. Missing template overrides can be saved using the supplied starter source. API responses are not cacheable. Saves require the updated server; older servers remain usable for post editing. Site setting and template rebuilds validate all documents before writing; an I/O failure during replacement may require fixing the storage issue and running `-rebuild` to finish applying the layout.
 
 ## Existing Markdown sites
 

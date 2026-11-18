@@ -144,3 +144,15 @@ footer {
   body { padding-top: 1.5rem; font-size: 1.05rem; }
   article > header time { font-size: 1.55rem; }
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #152025;
+    --ink: #e3edf1;
+    --muted: #a6bcc5;
+    --link: #8dcedf;
+  }
+
+  article pre { background: #203039; }
+}

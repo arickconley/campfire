@@ -110,3 +110,19 @@ main > p,
 footer { color: #555; }
 
 footer { margin-top: 2rem; font-size: 0.9rem; }
+
+@media (prefers-color-scheme: dark) {
+  html { color-scheme: dark; background: #181a1d; color: #e5e7eb; }
+  a { color: #9dc2ff; }
+  a:focus-visible { outline-color: #9dc2ff; }
+
+  main > ul time,
+  article > header time,
+  main > p,
+  footer { color: #adb5c0; }
+
+  main > ul li,
+  article + article { border-color: #42474f; }
+
+  article pre { background: #25292f; }
+}

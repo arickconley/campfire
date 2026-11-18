@@ -22,8 +22,16 @@ func Exists(root string) bool {
 	return err == nil
 }
 
-// Write creates root/site.yaml. Title is required.
+// Write creates root/site.yaml, defaulting an empty style to paper. Title is required.
 func Write(root string, cfg Config) error {
+	if strings.TrimSpace(cfg.Style) == "" {
+		cfg.Style = "paper"
+	}
+	return Save(root, cfg)
+}
+
+// Save writes root/site.yaml while preserving an intentionally empty style. Title is required.
+func Save(root string, cfg Config) error {
 	cfg.Title = strings.TrimSpace(cfg.Title)
 	cfg.Description = strings.TrimSpace(cfg.Description)
 	cfg.URL = strings.TrimRight(strings.TrimSpace(cfg.URL), "/")
@@ -31,10 +39,7 @@ func Write(root string, cfg Config) error {
 	if cfg.Title == "" {
 		return ErrTitle
 	}
-	if cfg.Style == "" {
-		cfg.Style = "paper"
-	}
-	if !validStyle(cfg.Style) {
+	if cfg.Style != "" && !validStyle(cfg.Style) {
 		return ErrStyle
 	}
 	body, err := yaml.Marshal(wizardFile{

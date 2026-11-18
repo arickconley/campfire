@@ -58,3 +58,39 @@ func (s *Server) siteFile(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, file)
 }
+
+func (s *Server) siteSettings(w http.ResponseWriter, r *http.Request) {
+	if !s.auth(w, r) {
+		return
+	}
+	if r.Method == http.MethodGet {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		settings, err := content.ReadSiteSettings(s.Root)
+		if err != nil {
+			writeStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, settings)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+	var in content.SiteSettings
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "file too large")
+		} else {
+			writeErr(w, http.StatusBadRequest, "invalid json")
+		}
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	settings, err := content.UpdateSiteSettings(s.Root, in)
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
